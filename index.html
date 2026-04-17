@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chalk Mode Demo</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: white;
+            font-family: sans-serif;
+            user-select: none; /* Verhindert das versehentliche Markieren von Text beim Zeichnen */
+        }
+        
+        #drawingCanvas {
+            display: block;
+            cursor: crosshair;
+        }
+
+        /* Das UI-Panel oben */
+        #controls {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(240, 240, 240, 0.9);
+            padding: 10px 20px;
+            box-sizing: border-box;
+            border-bottom: 1px solid #ccc;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            z-index: 10;
+        }
+
+        /* Das schwebende Wasserzeichen */
+        #watermark {
+            position: absolute;
+            top: 70px;
+            left: 30px;
+            color: rgba(150, 150, 150, 0.7);
+            font-size: 16px;
+            line-height: 1.5;
+            font-weight: bold;
+            pointer-events: none; /* Klicks gehen durch den Text hindurch auf die Leinwand */
+            z-index: 5;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="controls">
+        <label for="speedSlider" id="speedLabel">Geschwindigkeits-Limit (Pixel/Sek): 400</label>
+        <input type="range" id="speedSlider" min="50" max="1500" value="400" style="width: 300px;">
+    </div>
+
+    <div id="watermark">
+        Willkommen zur Chalk Mode Demo!<br><br>
+        1. Normal schreiben: Die Kreide bleibt satt und dunkel.<br>
+        2. Schnell & am Stück schreiben: Das Reservoir leert sich, die Schrift verblasst!<br>
+        3. Stift kurz absetzen: Die Kreide füllt sich im Hintergrund wieder auf.<br><br>
+        Finde mit dem Regler oben die perfekte Balance für deine Handschrift.
+    </div>
+
+    <canvas id="drawingCanvas"></canvas>
+
+    <script>
+        // --- Setup der Leinwand ---
+        const canvas = document.getElementById('drawingCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Leinwand auf Fenstergröße anpassen
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // --- Parameter ---
+        let v_limit = 400.0;
+        let current_gray = 0.0;
+        const smoothing = 0.15;
+        
+        const nib_width = 12;
+        const nib_height = 2;
+        const stamp_density = 0.5;
+
+        // Zeitpass-Filter
+        let history_buffer = [];
+        let history_dist = 0.0;
+        const time_window = 5.0; // Sekunden
+        const transition_range = 0.5;
+
+        // Status
+        let isDrawing = false;
+        let last_point = null;
+        let last_time = 0;
+
+        // --- Event Listener für den Slider ---
+        const speedSlider = document.getElementById('speedSlider');
+        const speedLabel = document.getElementById('speedLabel');
+        
+        speedSlider.addEventListener('input', (e) => {
+            v_limit = parseFloat(e.target.value);
+            speedLabel.textContent = `Geschwindigkeits-Limit (Pixel/Sek): ${v_limit}`;
+        });
+
+        // --- Zeichen-Logik ---
+        function startDrawing(e) {
+            isDrawing = true;
+            last_point = { x: e.clientX, y: e.clientY };
+            last_time = performance.now() / 1000.0; // in Sekunden
+            current_gray = 0.0;
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+            last_point = null;
+        }
+
+        function draw(e) {
+            if (!isDrawing || !last_point) return;
+
+            const current_point = { x: e.clientX, y: e.clientY };
+            const current_time = performance.now() / 1000.0;
+            
+            let dt = current_time - last_time;
+            if (dt <= 0) dt = 0.001;
+
+            const dx = current_point.x -
