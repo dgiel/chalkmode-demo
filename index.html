@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Chalk Mode Demo</title>
     <style>
         body {
@@ -10,15 +10,17 @@
             overflow: hidden;
             background-color: white;
             font-family: sans-serif;
-            user-select: none; /* Verhindert das versehentliche Markieren von Text beim Zeichnen */
+            user-select: none; 
+            -webkit-user-select: none; 
         }
         
         #drawingCanvas {
             display: block;
             cursor: crosshair;
+            /* WICHTIG: Sagt dem Browser, dass er Wischgesten ans Skript weitergeben soll */
+            touch-action: none; 
         }
 
-        /* Das UI-Panel oben */
         #controls {
             position: absolute;
             top: 0;
@@ -34,7 +36,6 @@
             z-index: 10;
         }
 
-        /* Das schwebende Wasserzeichen */
         #watermark {
             position: absolute;
             top: 70px;
@@ -43,7 +44,7 @@
             font-size: 16px;
             line-height: 1.5;
             font-weight: bold;
-            pointer-events: none; /* Klicks gehen durch den Text hindurch auf die Leinwand */
+            pointer-events: none; 
             z-index: 5;
         }
     </style>
@@ -66,41 +67,50 @@
     <canvas id="drawingCanvas"></canvas>
 
     <script>
-        // --- Setup der Leinwand ---
         const canvas = document.getElementById('drawingCanvas');
         const ctx = canvas.getContext('2d');
 
-        // Leinwand auf Fenstergröße anpassen
+        // --- Intelligentes Resize (Verhindert das Löschen beim Scrollen) ---
         function resizeCanvas() {
+            // Aktuelles Bild retten
+            const tempCanvas = document.createElement('canvas');
+            if (canvas.width > 0) {
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                tempCanvas.getContext('2d').drawImage(canvas, 0, 0);
+            }
+
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
+            
             ctx.fillStyle = "white";
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Gerettetes Bild wieder einfügen
+            if (canvas.width > 0) {
+                ctx.drawImage(tempCanvas, 0, 0);
+            }
         }
         window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
+        resizeCanvas(); // Initiale Größe
 
         // --- Parameter ---
         let v_limit = 400.0;
         let current_gray = 0.0;
-        const smoothing = 0.15;
         
         const nib_width = 12;
         const nib_height = 2;
         const stamp_density = 0.5;
 
-        // Zeitpass-Filter
         let history_buffer = [];
         let history_dist = 0.0;
-        const time_window = 5.0; // Sekunden
+        const time_window = 5.0; 
         const transition_range = 0.5;
 
-        // Status
         let isDrawing = false;
         let last_point = null;
         let last_time = 0;
 
-        // --- Event Listener für den Slider ---
         const speedSlider = document.getElementById('speedSlider');
         const speedLabel = document.getElementById('speedLabel');
         
@@ -113,11 +123,11 @@
         function startDrawing(e) {
             isDrawing = true;
             last_point = { x: e.clientX, y: e.clientY };
-            last_time = performance.now() / 1000.0; // in Sekunden
+            last_time = performance.now() / 1000.0; 
             current_gray = 0.0;
         }
 
-        function stopDrawing() {
+        function stopDrawing(e) {
             isDrawing = false;
             last_point = null;
         }
@@ -125,10 +135,20 @@
         function draw(e) {
             if (!isDrawing || !last_point) return;
 
+            // Verhindert das Browser-Standardverhalten (z.B. Text markieren)
+            e.preventDefault(); 
+
             const current_point = { x: e.clientX, y: e.clientY };
             const current_time = performance.now() / 1000.0;
             
             let dt = current_time - last_time;
             if (dt <= 0) dt = 0.001;
 
-            const dx = current_point.x -
+            const dx = current_point.x - last_point.x;
+            const dy = current_point.y - last_point.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            history_buffer.push({ time: current_time, dist: dist });
+            history_dist += dist;
+
+            while (history_buffer.length > 0 && (current_time - history_buffer[0].time) >
