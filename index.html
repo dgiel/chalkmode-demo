@@ -110,15 +110,21 @@
         let isDrawing = false;
         let last_point = null;
         let last_time = 0;
-
+        
         const speedSlider = document.getElementById('speedSlider');
         const speedLabel = document.getElementById('speedLabel');
         
-        speedSlider.addEventListener('input', (e) => {
+        // Eine kleine Hilfsfunktion für das Update
+        function updateSpeed(e) {
             v_limit = parseFloat(e.target.value);
             speedLabel.textContent = `Geschwindigkeits-Limit (Pixel/Sek): ${v_limit}`;
-        });
+        }
 
+        // Wir fangen jetzt alle Browser-Eigenheiten ab: Ziehen (input) UND Loslassen (change)
+        speedSlider.addEventListener('input', updateSpeed);
+        speedSlider.addEventListener('change', updateSpeed);
+        
+        
         // --- Zeichen-Logik ---
         function startDrawing(e) {
             isDrawing = true;
