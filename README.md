@@ -1,4 +1,3 @@
-#===========================================================================
 CHALK MODE DEMO - Digitale Tafel mit didaktischem Geschwindigkeits-Filter
 ===========================================================================
 Urheber: Dominik Giel
